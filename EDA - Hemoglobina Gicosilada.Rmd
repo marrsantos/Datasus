@@ -1,0 +1,184 @@
+---
+title: "Exploratory Data Analysis Report (EDA)"
+author: "Marcelo Santos"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_notebook
+subtitle: Hemoglobina Glicosilada - DM Analytics
+---
+
+### INTRODUÇÃO
+
+Este documento descreve uma análise exploratória de exames de Hemoglobina Glicosilada.
+
+Dataset com procedimentos ambulatoriais realizados no Estado do Paraná, em Fevereiro de 2016.
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
+#
+# Abrindo bibliotecas 
+#
+library(dplyr)
+library(ggplot2)
+library(ggmap)
+library(ggrepel)
+```
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
+#
+# Configurando pasta de trabalho
+#
+stage_folder <- paste(getwd(), '/../datasets/stage/', sep='')
+#
+```
+
+
+### Verificação inicial dos dados
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE}
+#
+# Abrindo Datasets de trabalho
+#
+# Dataset principal
+dfevents <- read.csv(paste(stage_folder,"dfevents.csv",sep=''),sep=',',header=T)
+# Dataset auxiliar
+dfsiaaux <- read.csv(paste(stage_folder,"dfsia.csv",sep=''),sep=',',header=T)
+# Dataset de cidades com latitude e longitude
+dfcities<-read.csv(paste(stage_folder,"dfcities.csv",sep=''),sep=',',header=T)
+```
+
+
+Total de exames de Hemoglobina Glicosilada: **`r sum(dfevents$qtde) `** 
+
+Custo estimado: **`r format(sum(dfevents$total),nsmall=2) `** (tabela SIGTAP)
+
+Número de procedimentos com autorização individualizada: **`r a<-subset(dfsiaaux,dfsiaaux$PA_AUTORIZ != 0); sum(a$PA_QTDAPR) `**
+
+Preenchimento do campo CID:
+
+```{r}
+table(dfsiaaux$PA_CIDPRI)
+```
+
+Preenchimento do campo idade:
+```{r}
+table(dfsiaaux$PA_IDADE)
+```
+
+Preenchimento do campo sexo:
+```{r}
+table(dfsiaaux$PA_SEXO)
+```
+
+Dataset Criado
+
+```{r}
+summary(dfevents)
+```
+
+### Análise preliminar
+
+
+```{r}
+par(mai=c(1.5,0.8,0.6,0.5))
+a<-dfevents %>% group_by(NO_REG) %>% summarize(c=sum(qtde), t=sum(total))
+vqtd<-sum(dfevents$qtde)
+a<-arrange(a,desc(c))
+a<-a[1:8,]
+b<-barplot(a$c/vqtd*100, las=2, cex.names = 0.7, ylab='%', ylim=c(0,60), cex=.7, names.arg=a$NO_REG)
+text(b,round(a$c/vqtd*100,1)-1.5,paste("n=",a$c,sep=''), cex=0.7)
+text(b,round(a$c/vqtd*100,1)+2,paste("R$",a$t,sep=''), cex=0.7)
+title(main=list("Exames por regiões de saúde - Estado do Paraná (2017/2018)",cex=1,font=1))
+```
+
+
+```{r}
+par(mai=c(2,0.8,0.6,0.5))
+a<- subset(dfevents, CO_REG == '41002') %>% group_by(n=paste(substring(FANTASIA,1,18),'/',substring(NO_MUN,1,10),sep='')) %>% summarize(c=sum(qtde),t=sum(total))
+vqtd<-sum(a$c)
+a<-arrange(a,desc(c)) 
+a<-a[1:8,]
+b<-barplot(a$c/vqtd*100, las=2, cex.names = 0.6, ylab='%', ylim=c(0,50), cex=.7, names.arg=a$n)
+text(b,round(a$c/vqtd*100,1)-3,paste("n=",a$c,sep=''), cex=0.7)
+text(b,round(a$c/vqtd*100,1)+3,paste("R$",a$t,sep=''), cex=0.7)
+title(main= list("Exames por unidade saúde na região metropolitana de Curitiba (02/2016)",cex=1,font=1))
+```
+
+
+```{r}
+par(mai=c(1.5,0.8,0.6,0.5))
+a<- subset(dfevents, CO_REG == '41002') %>% group_by(NO_MUN) %>% summarize(c=sum(qtde),t=sum(total))
+vqtd<-sum(a$c)
+a<-arrange(a,desc(c)) 
+a<-a[1:10,]
+b<-barplot(a$c/vqtd*100, las=2, cex.names = 0.7, ylab='%', ylim=c(0,100), cex=.7, names.arg=a$NO_MUN)
+text(b,round(a$c/vqtd*100,1)-3,paste("n=",a$c,sep=''), cex=0.7)
+text(b,round(a$c/vqtd*100,1)+3,paste("R$",a$t,sep=''), cex=0.7)
+title(main=list("Exames por cidade na região metropolina de Curitiba (02/2016)",cex=1,font=1))
+```
+
+```{r}
+par(mai=c(2,0.8,0.6,0.5))
+a<- subset(dfevents, CO_REG == '41017') %>% group_by(n=paste(substring(FANTASIA,1,18),'/',substring(NO_MUN,1,10),sep='')) %>% summarize(c=sum(qtde),t=sum(total))
+vqtd<-sum(a$c)
+a<-arrange(a,desc(c)) 
+a<-a[1:10,]
+b<-barplot(a$c/vqtd*100, las=2, cex.names = 0.6, ylab='%', ylim=c(0,80), cex=.7, names.arg=a$n)
+text(b,round(a$c/vqtd*100,1)-3,paste("n=",a$c,sep=''), cex=0.7)
+text(b,round(a$c/vqtd*100,1)+3,paste("R$",a$t,sep=''), cex=0.7)
+title(main=list("Exames por unidade saúde na região de Londrina (02/2016)",cex=1,font=1))
+```
+
+
+
+```{r}
+par(mai=c(1.5,0.8,0.6,0.5))
+a<-dfevents %>% group_by(NO_MUN) %>% summarize(c=sum(qtde),t=sum(total))
+vqtd<-sum(dfevents$qtde)
+a<-arrange(a,desc(c)) 
+a<-a[1:10,]
+b<-barplot(a$c/vqtd*100, las=2, cex.names = 0.7, ylab='%', ylim=c(0,60), cex=.7, names.arg=a$NO_MUN)
+text(b,round(a$c/vqtd*100,1)-3,paste("n=",a$c,sep=''), cex=0.7)
+text(b,round(a$c/vqtd*100,1)+3,paste("R$",a$t,sep=''), cex=0.7)
+title(main=list("Frequência de exames por cidade - Estado do Paraná (02/2016)",cex=1,font=1))
+```
+
+
+
+```{r}
+par(mai=c(2,0.8,0.6,0.5))
+a<- dfevents %>% group_by(n=paste(substring(FANTASIA,1,18),'/',substring(NO_MUN,1,10),sep='')) %>% summarize(c=sum(qtde),t=sum(total))
+vqtd<-sum(a$c)
+a<-arrange(a,desc(c)) 
+a<-a[1:10,]
+b<-barplot(a$c/vqtd*100, las=2, cex.names = 0.6, ylab='%', ylim=c(0,50), cex=.7, names.arg=a$n)
+text(b,round(a$c/vqtd*100,1)-3,paste("n=",a$c,sep=''), cex=0.7)
+text(b,round(a$c/vqtd*100,1)+3,paste("R$",a$t,sep=''), cex=0.7)
+title(main=list("Exames por unidade saúde no Estado do Paraná (02/2016)",cex=1,font=1))
+```
+
+```{r}
+# Carregando mapa do Paraná
+load(file = paste(stage_folder,"PRmap.csv",sep=''))
+
+dfsiamap<-group_by(dfevents, NO_REG, NO_MUN)%>% summarize(total=sum(total))   
+dfsiamap<-left_join(dfsiamap, dfcities, by = c("NO_MUN"="NO_MUN"))
+```
+
+Distribuição de exames por cidade do Estado do Paraná
+
+```{r}
+ggmap(map) +
+     geom_point(data = dfsiamap, aes(x = lon, y = lat, size=total, colour=factor(NO_REG))) + 
+     theme(legend.text = element_text(size=6)) +
+     theme(legend.title = element_text(size=8))
+```
+
+### Considerações
+
+- Buscar bases com maior qualidade de dados para complementar a visão, por exemplo, possibilitando explorar visões através de outros demográficos (e.g. idade, sexo, etc.)
+
+- Verificar disponibilidade de dados de CMD, Hiperdia e Farmácia Popular.
+
+- Como se trata de doença crônica, utilizar uma base de dados de medicamentos em complementação da visão de exames pode revelar padrões interessantes.
+
+- Entender qual a amplitude da pesquisa (populaçã, período de tempo, estados ou cidades)
+

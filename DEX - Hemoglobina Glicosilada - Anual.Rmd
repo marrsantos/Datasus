@@ -1,0 +1,153 @@
+---
+title: "Data Extraction Report (DEX)"
+author: "Marcelo Santos"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_notebook
+subtitle: Hemoglobina Glicosilada - DM Analytics
+---
+
+### INTRODUÇÃO
+
+Este documento descreve a preparação de dados para geração de dataset principal para a análise exploratória de exames de Hemoglobina Glicosilada. Os datasets originais foram baixados diretamente do site do DATASUS.
+
+Período: 2017 e 2018
+
+Abrindo bibliotecas 
+```{r}
+library(read.dbc)
+library(foreign)
+library(dplyr)
+library(utils)
+library(readr)
+```
+
+Abrindo dataset de procedimento ambulatorial DATASUS
+```{r}
+#
+# Configurando pasta de trabalho
+#
+data_folder <- paste(getwd(), '/../datasets/original/', sep='')
+stage_folder <- paste(getwd(), '/../datasets/stage/', sep='')
+#
+```
+
+```{r}
+# Dataset de exames de Hemoglobina Glicada - SIGTAP: 0202010503
+#
+a <- read.csv(paste(data_folder,"dfsia2017.csv",sep=''),sep=',',header=T)
+b <- read.csv(paste(data_folder,"dfsia2018.csv",sep=''),sep=',',header=T)
+dfsia <- rbind(a, b)
+rm(a, b)
+#dfsia <- read.csv(paste(data_folder,"dfsia2018.csv",sep=''),sep=',',header=T)
+dfsia$PA_UFMUN<-as.factor(dfsia$PA_UFMUN)
+dfsia$PA_MUNPCN<-as.factor(dfsia$PA_MUNPCN)
+dfsia$PA_CBOCOD<-as.factor(dfsia$PA_CBOCOD)
+dfsia$PA_CODUNI<-substring(as.character(dfsia$PA_CODUNI+10000000),2,8)
+dfsia$PA_CODUNI<-as.factor(dfsia$PA_CODUNI)
+dfsia$PA_PROC_ID<-substring(as.character(dfsia$PA_PROC_ID+10000000000),2,11)
+dfsia$PA_PROC_ID<-as.factor(dfsia$PA_PROC_ID)
+#
+```
+
+Preparando outros datasets
+```{r}
+#
+# Preparando municipios, regioes e CBO
+#
+dfmun <- read.csv(paste(data_folder,"br_municip.csv",sep=''),sep=',',header=F)
+names(dfmun)<-c('UFMUN','NO_MUN')
+dfmun$UFMUN<-as.factor(dfmun$UFMUN)
+dfreg <- read_csv(paste(data_folder,"br_regsaud.csv",sep=''),col_names = c("CO_REG","NO_REG", "REGUFMUN"), locale = locale(encoding = "ISO-8859-1"), skip=1)
+dfreg$CO_REG<-as.factor(dfreg$CO_REG)
+dfreg$REGUFMUN<-as.factor(dfreg$REGUFMUN)
+dfcbo <- read.dbf(paste(data_folder,"CBO.dbf",sep=''))
+dfuf <- read_csv(paste(data_folder,"br_uf.csv",sep=''),col_names = c("CO_UF","NO_UF"), locale = locale(encoding = "ISO-8859-1"))
+dfuf$CO_UF<-as.character(dfuf$CO_UF)
+dfmicibge <- read_csv(paste(data_folder,"br_micibge.csv",sep=''),col_names = c("CO_REGibge","NO_REGibge", "REGUFMUNibge", "x"), locale = locale(encoding = "ISO-8859-1"))
+dfmicibge<-dfmicibge[,-4]
+dfmicibge$CO_REGibge<-as.character(dfmicibge$CO_REGibge)
+dfmicibge$REGUFMUNibge<-as.factor(dfmicibge$REGUFMUNibge)
+#
+# Preparando tabela de sigtap
+#
+dfproc <- read_csv(paste(data_folder,"tb_procedimento.csv",sep=''),col_names = c("CO_PROC","NO_PROC"), locale = locale(encoding = "ISO-8859-1"))
+dfproc$CO_PROC<-substring(as.character(dfproc$CO_PROC+10000000000),2,11)
+dfproc$CO_PROC<-as.factor(dfproc$CO_PROC)
+```
+```{r}
+#
+# Preparando tabela de cnes
+#
+dfcnes <- read.dbf(paste(data_folder,"CNESBR.dbf",sep=''))
+dfcnes <- dfcnes[,1:2]
+dfcnes1 <- read.dbc(paste(data_folder,"STPR1812.dbc",sep=''))
+dfcnes<-left_join(dfcnes, dfcnes1[,c("CNES", "COD_CEP", "CPF_CNPJ", "CNPJ_MAN")], by = c("CNES"="CNES"))
+dfcnes<-subset(dfcnes,!is.na(COD_CEP))
+dfcnes$CNES<-substring(as.character(as.numeric(dfcnes$CNES)+10000000),2,8)
+dfcnes$CNES<-as.factor(dfcnes$CNES)
+rm(dfcnes1)
+```
+
+Realizando join com tabelas dimensões
+
+```{r}
+dfsiaaux<-group_by(dfsia, PA_UFMUN, PA_CODUNI, PA_MUNPCN, PA_PROC_ID, PA_CBOCOD, anomes)%>% summarize(count=n(),qtde=sum(PA_QTDAPR),total=sum(PA_VALAPR))   
+#
+# Completando o dataset com descrições
+#
+dfsia_new<-left_join(dfsiaaux, dfmun, by = c("PA_UFMUN"="UFMUN"))
+dfsia_new<-left_join(dfsia_new, dfcnes, by = c("PA_CODUNI"="CNES"))
+dfsia_new<-left_join(dfsia_new, dfcbo, by = c("PA_CBOCOD"="CBO"))
+dfsia_new<-left_join(dfsia_new, dfproc, by = c("PA_PROC_ID"="CO_PROC"))
+dfsia_new<-left_join(dfsia_new, dfreg, by = c("PA_UFMUN"="REGUFMUN"))
+dfsia_new<-left_join(dfsia_new, dfmicibge, by = c("PA_UFMUN"="REGUFMUNibge"))
+dfsia_new$CO_UF<-substring(dfsia_new$PA_UFMUN, 1,2)
+dfsia_new<-left_join(dfsia_new, dfuf, by = c("CO_UF"="CO_UF"))
+#
+dfsia_new$PA_CODUNI<-as.factor(dfsia_new$PA_CODUNI)
+dfsia_new$PA_CBOCOD<-as.factor(dfsia_new$PA_CBOCOD)
+dfsia_new$NO_MUN<-toupper(dfsia_new$NO_MUN)
+dfsia_new$NO_MUN<-as.factor(dfsia_new$NO_MUN)
+dfsia_new$PA_UFMUN<-as.factor(dfsia_new$PA_UFMUN)
+dfsia_new$NO_PROC<-as.factor(dfsia_new$NO_PROC)
+dfsia_new$CO_REG<-as.factor(dfsia_new$CO_REG)
+dfsia_new$NO_REG<-as.factor(dfsia_new$NO_REG)
+dfsia_new$CO_REGibge<-as.factor(dfsia_new$CO_REGibge)
+dfsia_new$NO_REGibge<-as.factor(dfsia_new$NO_REGibge)
+dfsia_new$CO_UF<-as.character(dfsia_new$CO_UF)
+dfsia_new$NO_UF<-as.character(dfsia_new$NO_UF)
+#
+dfsia_new$NO_MUN<-droplevels(dfsia_new$NO_MUN)
+dfsia_new$FANTASIA<-droplevels(dfsia_new$FANTASIA)
+dfsia_new$DS_CBO<-droplevels(dfsia_new$DS_CBO)
+dfsia_new$PA_MUNPCN<-droplevels(dfsia_new$PA_MUNPCN)
+dfsia_new$COD_CEP<-droplevels(dfsia_new$COD_CEP)
+dfsia_new$CPF_CNPJ<-droplevels(dfsia_new$CPF_CNPJ)
+dfsia_new$CNPJ_MAN<-droplevels(dfsia_new$CNPJ_MAN)
+dfsia_new$CO_REG<-droplevels(dfsia_new$CO_REG)
+dfsia_new$NO_REG<-droplevels(dfsia_new$NO_REG)
+dfsia_new$CO_REGibge<-droplevels(dfsia_new$CO_REGibge)
+dfsia_new$NO_REGibge<-droplevels(dfsia_new$NO_REGibge)
+#
+dfsia_new$PA_PROC_ID<-as.factor(dfsia_new$PA_PROC_ID)
+dfsia_new$CO_UF<-as.factor(dfsia_new$CO_UF)
+dfsia_new$NO_UF<-as.factor(dfsia_new$NO_UF)
+#
+# Reordenando as colunas do dataset
+#
+dfevents<-dfsia_new[,c(6,21,22,1,10,17,18,19,20,2,11,12,13,14,5,15,4,16,3,7,8,9)]
+dfevents$DT_REF<-paste("01/",substring(dfevents$anomes,7,8),"/",substring(dfevents$anomes,5,6),sep="")
+#
+```
+
+Gravando datasets
+
+```{r}
+write.table(dfevents, file = paste(stage_folder,"dfevents.csv",sep=''), sep = ",", row.names=FALSE)
+write.table(dfsia, file = paste(stage_folder,"dfsia.csv",sep=''), sep = ",", row.names=FALSE)
+```
+
+Limpando a memória
+```{r}
+rm(list=ls())
+```
